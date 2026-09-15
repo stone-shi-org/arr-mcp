@@ -5,6 +5,7 @@ import logging
 import os
 from typing import List, Dict, Any, Optional
 from starlette.responses import PlainTextResponse
+from starlette.applications import Starlette
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -549,29 +550,43 @@ async def get_version(request) -> PlainTextResponse:
     return PlainTextResponse(version_info)
 
 
+def create_combined_app(mcp_server: FastMCP = mcp) -> Starlette:
+    """Create a Starlette application combining SSE and Streamable HTTP endpoints.
+    
+    Exposes:
+        - SSE endpoint at /sse and /messages
+        - Streamable HTTP endpoint at /mcp
+        - Custom routes (e.g. /version)
+    """
+    # Reset session manager if it has already been started in a previous lifecycle
+    if getattr(mcp_server, "_session_manager", None) is not None:
+        if getattr(mcp_server._session_manager, "_has_started", False):
+            mcp_server._session_manager = None
+
+    streamable_app = mcp_server.streamable_http_app()
+    sse_app = mcp_server.sse_app()
+
+    routes = []
+    seen = set()
+    for route in sse_app.routes + streamable_app.routes:
+        key = (getattr(route, "path", None), tuple(getattr(route, "methods", []) or []))
+        if key not in seen:
+            seen.add(key)
+            routes.append(route)
+
+    return Starlette(
+        routes=routes,
+        lifespan=streamable_app.router.lifespan_context
+    )
+
+
 if __name__ == "__main__":
     transport = settings.mcp_transport.lower()
     if transport in ("sse", "http", "streamable-http", "streamable_http", "dual", "all"):
         logger.info(f"Starting Arr-MCP server over HTTP (SSE on /sse, Streamable HTTP on /mcp) on {settings.mcp_host}:{settings.mcp_port}...")
         import uvicorn
-        from starlette.applications import Starlette
 
-        streamable_app = mcp.streamable_http_app()
-        sse_app = mcp.sse_app()
-
-        routes = []
-        seen = set()
-        for route in sse_app.routes + streamable_app.routes:
-            key = (getattr(route, "path", None), tuple(getattr(route, "methods", []) or []))
-            if key not in seen:
-                seen.add(key)
-                routes.append(route)
-
-        combined_app = Starlette(
-            routes=routes,
-            lifespan=streamable_app.router.lifespan_context
-        )
-
+        combined_app = create_combined_app(mcp)
         uvicorn.run(combined_app, host=settings.mcp_host, port=settings.mcp_port)
     else:
         logger.info("Starting Arr-MCP server over stdio...")

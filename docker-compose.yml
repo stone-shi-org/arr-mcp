@@ -9,7 +9,7 @@ services:
     env_file:
       - .env
     environment:
-      - MCP_TRANSPORT=sse
+      - MCP_TRANSPORT=http
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8000
     restart: unless-stopped
