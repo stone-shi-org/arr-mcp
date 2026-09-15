@@ -11,9 +11,25 @@ from starlette.applications import Starlette
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("arr-mcp")
 
+# Server-level usage overview surfaced via InitializeResult.instructions, so clients
+# can do tiered loading: read this first, then consult individual tool schemas on demand.
+SERVER_INSTRUCTIONS = (
+    "Arr-MCP provides tools to manage Sonarr, Radarr, and Lidarr instances. "
+    "Tools are namespaced by service prefix (sonarr_/radarr_/lidarr_); use the prefix "
+    "matching the media type you're working with. "
+    "Recommended tool-call ordering: first call the relevant *_get_status/*_get_health "
+    "tool to confirm connectivity, then use *_list_*/*_get_* lookup tools (e.g. "
+    "list_root_folders, list_quality_profiles, search_*) to discover valid IDs, and only "
+    "then call mutating tools (*_add_*, *_update_*, *_delete_*, *_trigger_command). "
+    "Caveats: list endpoints are paginated (page/page_size/nopager args) and mutating "
+    "calls act directly on the underlying *arr instance, so confirm IDs via a list/search "
+    "call first."
+)
+
 # Instantiate MCP with network configurations
 mcp = FastMCP(
     "Arr-MCP",
+    instructions=SERVER_INSTRUCTIONS,
     host=settings.mcp_host,
     port=settings.mcp_port
 )

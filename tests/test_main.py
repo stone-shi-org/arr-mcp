@@ -1,6 +1,6 @@
 import pytest
 from starlette.testclient import TestClient
-from main import paginate_list, create_combined_app, mcp
+from main import paginate_list, create_combined_app, mcp, SERVER_INSTRUCTIONS
 
 
 class TestPaginateList:
@@ -102,4 +102,35 @@ class TestCombinedApp:
             assert response.status_code == 200
             assert "text/event-stream" in response.headers.get("content-type", "")
             assert "protocolVersion" in response.text
+            assert "instructions" in response.text
+
+
+class TestServerInstructions:
+    def test_instructions_configured_on_server(self):
+        assert mcp.instructions == SERVER_INSTRUCTIONS
+
+    def test_instructions_non_empty_string(self):
+        assert isinstance(SERVER_INSTRUCTIONS, str)
+        assert len(SERVER_INSTRUCTIONS.strip()) > 0
+
+    def test_instructions_present_in_initialize_response(self):
+        app = create_combined_app(mcp)
+        with TestClient(app) as client:
+            init_payload = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test-client", "version": "1.0"},
+                },
+            }
+            response = client.post(
+                "/mcp",
+                json=init_payload,
+                headers={"Accept": "application/json, text/event-stream"},
+            )
+            assert response.status_code == 200
+            assert SERVER_INSTRUCTIONS in response.text
 
